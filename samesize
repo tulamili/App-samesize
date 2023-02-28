@@ -18,7 +18,7 @@ my $t0 = $time_start -> [0] ;
 
 getopts '0:2b:Df:l:nos' , \my%o ; 
 
-my @files = @ARGV ? @ARGV : glob '*' ; # glob '*' はディレクトリのファイルは抽出しない。
+my @Files0 = @ARGV ? @ARGV : glob '*' ; # glob '*' はディレクトリのファイルは抽出しない。
 
 $o{2} = 1 if $o{D} ; # <--- 要注意。 不用意のこの行はコメントアウトや除去をしないように。
 $o{0} //= 1 ; # <--- 要注意。 不用意のこの行はコメントアウトや除去をしないように。
@@ -29,35 +29,30 @@ END{ print RESET "" } ;
 
 sub main () {
 
-  my %s2f ;
-  for ( @files ) {
+  my %s2f ; # %{ $s2f { $size } } でバイトサイズから、ファイル名の一覧を取り出せる。
+  for ( @Files0 ) {
   	next if -d $_ ; # ディレクリファイルは、対象外となる。
     next if -l $_ && 0 eq ($o{l}//'') ;  # -l0 を指定すると、シンボリックリンクファイルは、対象外。
   	my $size = ( stat ) [7] ; # <-- - lstat でなくて stat なので、シンボリックリンクのファイルはその先の中身を見る。
-  	next if defined $o{b} && $size < $o{b} ;
-  	push @{$s2f{$size}} , $_ ;
-  	my @out = ( $size , $_ ) ;
-  	#say join "\t" , @out ;
+  	next if $size <  ( $o{b} // 0 ) ; # 最小のバイトサイズを見たな避ければ、対象外。
+  	push @{ $s2f{$size} } , $_ ;
   }
 
-  my $least = $o{f} // 2 ; # ? 1 : 2 ;
+  my $least = $o{f} // 2 ; # 同じバイトサイズが何個以上の場合を対象にするか? 
   my @sizes  = sort { $a<=>$b } grep { @{ $s2f { $_ } } >= $least } keys %s2f ; 
-  my $nfmt = do { my $t = max @sizes , 0 ; my $d = length "$t" ; "%${d}s" } ; # <-- %${d}u ?? 
+  my $nfmt = do { my $t = max @sizes , 0 ; my $d = length "$t" ; "%${d}s" } ; # サイズの数値のフォーマットを"%7d"のように決める。
   for my $size ( @sizes ) { 
-  	#next if @{ $s2f{$size} } == 1 ;
   	my @files = sort @{ $s2f{$size} } ; # ファイルの一覧
   	@files = sort {(stat $a)[9] <=> (stat $b)[9] } @files if $o{n} // $o{o} ;
   	@files = reverse @files if $o{n} ;
   	my %seenD ; # 既に見たハッシュダイジェスト値
   	for ( @files ) { 
-      my @t3 =  (stat $_)[8,9,10] ; # <-- stat にしたのを便宜上の変更
-
-  	  my $ctx = Digest::MD5 -> new;
-  	  unless ($o{0}){
+      my @t3 = ( stat $_ ) [ 8, 9, 10 ] ; # <-- atime, mtime, ctime の 日時3情報
+  	  my $ctx = Digest::MD5 -> new ;
+  	  unless ( $o{0} ) {
   	    open my $FH, '<', $_ or die  "Can't open '$_': $!";
   	    binmode $FH ; 
-	      $ctx->addfile( $FH );
-	      close $FH ;
+	      $ctx -> addfile ( $FH );
 	    }
 
 	    utime @t3[0,1] , $_ unless $o{0} ; # <- -- --- 時刻情報を破壊し得る。もしくは秒の小数点以下の情報が消える。
