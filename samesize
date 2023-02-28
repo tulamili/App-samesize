@@ -15,6 +15,7 @@ sub dtwhen ( $ ) ;  # 各日時情報を、表示用の文字列に変換する�
 my $time_start = [ gettimeofday ] ; 
 my $t0 = $time_start -> [0] ;
 my $d0 = getcwd ; 
+my $cnt ; # 表示する出力ファイル数
 
 getopts '~2b:Df:l:mnst' , \my%o ; 
 
@@ -70,6 +71,7 @@ sub main () {
       }
   	  my @out = ( sprintf ($fmt , $size)  , $digest , map ( dtwhen $_ , @t3 ) , $_ ) ;
   	  say join "\t" , @out ;
+      $cnt ++ 
   	}
   }
 }
@@ -81,8 +83,10 @@ sub dtwhen ( $ ) {
 
 END {
   exit if exists $o{v} && $o{v} eq "0" ;
-  say STDERR BOLD FAINT " --  " , " Process time: " ,  " " , 
-  sprintf( "%.6f", tv_interval $time_start , [ gettimeofday ] ) , " second(s)." ;
+  say STDERR BOLD FAINT " --  " , 
+  sprintf( "%.6f", tv_interval $time_start , [ gettimeofday ] ) , " second(s) in process. " , 
+  $cnt ," files shown.  " , 
+  "Format : byte-size, hash-value, {a,m,c}time, file-name." ;
 }
 
 ## ヘルプの扱い
@@ -133,5 +137,8 @@ sub HELP_MESSAGE {
    注意 : 
      * 同一内容のファイルを1個だけ残すにしても、シンボリックリンクファイルだけ残して、参照先の元のファイルを消すこともあり得るので、要注意。
      * 全く同一内容のファイルを消すにしても、シンボリックリンクファイルについては、参照先のファイルより時間関係が想定と異なる場合があるので、要注意。
+
+   開発上のメモ :
+     * -f N で 「N回以上現れた同じサイズかハッシュ値」に制限しているが、-y N..N のような柔軟な書き方を採用したい。
 
 =cut
