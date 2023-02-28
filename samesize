@@ -15,7 +15,8 @@ sub dtwhen ( $ ) ;  # 各日時情報を、表示用の文字列に変換する�
 my $time_start = [ gettimeofday ] ; 
 my $t0 = $time_start -> [0] ;
 my $d0 = getcwd ; 
-my $cnt ; # 表示する出力ファイル数
+my $cntF = 0 ; # 表示する出力ファイル数
+my $cntD = 0 ; # 削除したファイルの個数
 
 getopts '~2b:Df:l:mnstv:' , \my%o ; 
 
@@ -34,8 +35,6 @@ sub main () {
 
   my %s2f ; # %{ $s2f { $size } } でバイトサイズから、ファイル名の一覧を取り出せる。
   while ( defined ( $_  = shift @F0 ) ) {
-    #next if -d $_ ; # <-- ディレクリファイルは、その直下のファイルを見るようにする。
-    #do{ push @Files0 , glob "$_"  ; say YELLOW $_ ; next } if -d ; # <-- ディレクリファイルは、その直下のファイルを見るようにする。
     # ↓ ディレクリファイルは、その直下のファイルを見るようにする。ただし、ディレクトリの深追いはしない。
     do{ my $t = $_ ; chdir $t ; push @F0 , grep{ !-d && ($_=catfile $t,$_) } glob '*' ; chdir $d0 ; next } if -d ; 
     next if -l $_ && 0 eq ($o{l}//'') ;  # -l0 を指定すると、シンボリックリンクファイルは、対象外。
@@ -66,12 +65,13 @@ sub main () {
       my $digest = $o{m} ? $ctx -> hexdigest : '---' ;
       next if ! $seen{ $digest } ++ && $o{2} ;
       if ( $o{D} && $seen { $digest } >= 2 ) {
-        unlink $_ if ! $o{n} ; # ドライラン -n が指定していなければ、ファイルを削除。
-        $_ .=  YELLOW "\t<-- " . ( $o{n} ? 'would be ' : '' ) . 'removed.' ;
+        my $c = unlink $_ if ! $o{n} ; # ドライラン -n が指定していなければ、ファイルを削除。
+        $_ .=  YELLOW "\t<-- " . ( $o{n} ? 'would be removed..' : $c ? 'removed.' : 'removing failed !') ;
+        $cntD += $c // 0 ; 
       }
       my @out = ( sprintf ($fmt , $size)  , $digest , map ( dtwhen $_ , @t3 ) , $_ ) ;
       say join "\t" , @out ;
-      $cnt ++ 
+      $cntF ++ 
     }
   }
 }
@@ -85,7 +85,7 @@ END {
   exit if 0 eq ( $o{v} // '' ) ;
   say STDERR BOLD FAINT " --  " , 
   sprintf( "%.6f", tv_interval $time_start , [ gettimeofday ] ) , " second(s) in process. " , 
-  $cnt ," files shown.  " , 
+  $cntF ," file(s) shown. " , ( $cntD ? "$cntD file(s) removed. " : '' ) ,   
   "Format : byte-size, hash-value, {a,m,c}time, file-name." ;
 }
 
@@ -105,6 +105,7 @@ sub HELP_MESSAGE {
 }
 
 =encoding utf8
+
 =head1
 
   警告: このコマンドは謝ってファイルを消去する恐れがある。ただしどのファイルを消すか確かめる機能は実装してある。
