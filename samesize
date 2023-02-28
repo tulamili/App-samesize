@@ -1,6 +1,7 @@
 #!/usr/bin/perl 
 use 5.014 ; use strict ; use warnings  ;
 use Cwd qw [ getcwd abs_path ] ;
+use Digest::MD5 qw[ md5 md5_hex md5_base64 ] ; # use Digest::SHA1 qw[ sha1 sha1_hex sha1_base64 ]; 
 use feature qw [ say ] ;
 use File::Spec::Functions qw[ catfile splitdir rel2abs updir ] ; 
 use Getopt::Std ; 
@@ -9,7 +10,6 @@ use POSIX qw[ strftime ] ;
 use Term::ANSIColor qw [ :constants color ] ; $Term::ANSIColor::AUTORESET = 1 ; 
 use Time::HiRes qw[ stat gettimeofday tv_interval ] ;  # stat をマイクロ秒単位にする。
 
-use Digest::MD5 qw[ md5 md5_hex md5_base64 ] ; # use Digest::SHA1 qw[ sha1 sha1_hex sha1_base64 ]; 
 
 sub dtwhen ( $ ) ;
 
@@ -23,7 +23,7 @@ my @F0 = @ARGV ? @ARGV : glob '*' ; # glob '*' はディレクトリのファイ
 
 if ( $o{D} ) { # -Dは破壊的ゆえ、色々ここで仕込む。↓
   #$o{2} = 1 if $o{D} ; # -2 指定で、1番目は表示しない。
-  $o{m} = 1 if $o{D} ; # -m 指定で、m5ハッシュ値を計算させる。
+  $o{m} = 1 ; # -m 指定で、m5ハッシュ値を計算させる。
 } 
 & main ; 
 exit 0 ;
@@ -51,7 +51,7 @@ sub main () {
   	my @files = sort @{ $s2f{$size} } ; # ファイルの一覧
   	@files = sort {(stat $a)[9] <=> (stat $b)[9] } @files if $o{t} ;
   	@files = reverse @files if $o{'~'} ;
-  	my %seenD ; # 既に見たハッシュダイジェスト値
+  	my %seen ; # 既に見たハッシュダイジェスト値
   	for ( @files ) { 
       my @t3 = ( stat $_ ) [ 8, 9, 10 ] ; # <-- atime, mtime, ctime の 日時3情報
   	  my $ctx = Digest::MD5 -> new ;
@@ -64,10 +64,11 @@ sub main () {
 
 	    utime @t3[0,1] , $_ if $o{m} ; # ハッシュ値計算でアクセスしたことでアクセス日時が変わったことを、無かったことにする。
       my $digest = $o{m} ? $ctx -> hexdigest : '---' ;
-      next if ! $seenD{ $digest } ++ && $o{2} ;
-#      do { unlink $_ ; $_ .=  RED "\t<-- removed." } if $o{D} && $seenD{ $digest } >= 2 ; 
-#say CYAN $digest ;
-      do { 1 ; $_ .=  YELLOW "\t<-- " . ($o{n}?'would be ':'').'removed.' } if $o{D} && $seenD{ $digest } >= 2 ; 
+      next if ! $seen{ $digest } ++ && $o{2} ;
+      if ( $o{D} && $seen { $digest } >= 2 ) {
+        unlink $_ if ! $o{n} ; 
+        $_ .=  YELLOW "\t<-- " . ( $o{n} ? 'would be ' : '' ) . 'removed.' ;
+      }
   	  my @out = ( sprintf ($fmt , $size)  , $digest , map ( dtwhen $_ , @t3 ) , $_ ) ;
   	  say join "\t" , @out ;
   	}
@@ -107,17 +108,31 @@ sub HELP_MESSAGE {
 
 　$0 files 
 
-  全く同じバイトサイズのファイルを検出する。
+  全く同じバイトサイズのファイルを検出する。-mの指定によりMD5ハッシュ値が等しいかも見る。
+  引数には(通常2個以上の)ファイルを指定するが、ディレクトリが含まれていた場合には、その
+  ディレクトリの直下のファイルも見る。
 
  オプション:
+   -2 : 同じファイルのバイトサイズで，(-mが指定されたらハッシュ値も考慮して)2番目以降を取り出す。
    -m : MD5ハッシュ値を算出する。(なお、ファイルのアクセス時刻は変更しない工夫がしてある。)
    -b N : 処理対象とする最小のバイトサイズを指定。0バイトファイルを避けるなら1を指定。
    -D : 同じファイルサイズで，同じハッシュ値のものについて、2番目以降をファイル除去する。<-- 破壊的, 危険
    -f N : 少なくとも何回出現したものだけを取り出すかの指定。初期値は2。
    -l 0 : シンボリックリンクのファイルは、対象外にする。
    -n  : ドライラン。-D に対して、実際に削除は実行はしない。
-   -s : 180日以内について、日時情報は秒単位で表示。
+   -s : 180日以内の日時については、通常分単位。日時情報は秒単位で表示。なお、180日以上前は日付のみ。
    -t : 同じファイルサイズなら書換日時の古い順(time)
    -~ : ファイルの順序を指定されたものから逆順にする。
 
-   -2 : 同じファイルサイズで，同じハッシュ値のものについて、2番目以降を取り出す。
+  利用例 : 
+
+    $0 -f3 .  # 現行ディレクトリで、全く同じバイトサイズが3個以上あるファイルを見つける。
+    $0 -t    # 同じサイズのファイルを新しい順序に並べる。 
+    $0 -t~  # 同じサイズのファイルを古い順序に並べる。 -t -~ と -~t でも同様。
+    $0 -D -n  # 全く同じ内容のファイルについて、1個だけ残して削除。ただし-nによりドライランになる。
+
+   注意 : 
+     * 同一内容のファイルを1個だけ残すにしても、シンボリックリンクファイルだけ残して、参照先の元のファイルを消すこともあり得るので、要注意。
+     * 全く同一内容のファイルを消すにしても、シンボリックリンクファイルについては、参照先のファイルより時間関係が想定と異なる場合があるので、要注意。
+
+=cut
