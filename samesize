@@ -29,8 +29,6 @@ if ( $o{D} ) { # -Dは破壊的ゆえ、色々ここで仕込む。↓
 & main ; 
 exit 0 ;
 
-END{ print RESET "" } ;
-
 sub main () {
 
   my %s2f ; # %{ $s2f { $size } } でバイトサイズから、ファイル名の一覧を取り出せる。
@@ -80,6 +78,8 @@ sub dtwhen ( $ ) {
   my $fmt = abs ( $_[0] - $t0 ) >= 86400 * 180 ? '%Y-%m-%d' : $o{s} ? '%m-%d %H:%M:%S' : '%m-%d %H:%M';
   strftime $fmt , localtime $_[0] ;
 }
+
+END{ print RESET "" } ; # ENDの順序は重要。最初に書いたものが最後に実行される。このENDで文字の着色を消すことが出来る。
 
 END {
   exit if 0 eq ( $o{v} // '' ) ;
