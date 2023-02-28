@@ -34,51 +34,51 @@ sub main () {
 
   my %s2f ; # %{ $s2f { $size } } でバイトサイズから、ファイル名の一覧を取り出せる。
   while ( defined ( $_  = shift @F0 ) ) {
-  	#next if -d $_ ; # <-- ディレクリファイルは、その直下のファイルを見るようにする。
+    #next if -d $_ ; # <-- ディレクリファイルは、その直下のファイルを見るようにする。
     #do{ push @Files0 , glob "$_"  ; say YELLOW $_ ; next } if -d ; # <-- ディレクリファイルは、その直下のファイルを見るようにする。
     # ↓ ディレクリファイルは、その直下のファイルを見るようにする。ただし、ディレクトリの深追いはしない。
     do{ my $t = $_ ; chdir $t ; push @F0 , grep{ !-d && ($_=catfile $t,$_) } glob '*' ; chdir $d0 ; next } if -d ; 
     next if -l $_ && 0 eq ($o{l}//'') ;  # -l0 を指定すると、シンボリックリンクファイルは、対象外。
-  	my $size = ( stat ) [7] ; # <-- - lstat でなくて stat なので、シンボリックリンクのファイルはその先の中身を見る。
-  	next if $size <  ( $o{b} // 0 ) ; # 最小のバイトサイズを見たな避ければ、対象外。
-  	push @{ $s2f{$size} } , $_ ;
+    my $size = ( stat ) [7] ; # <-- - lstat でなくて stat なので、シンボリックリンクのファイルはその先の中身を見る。
+    next if $size <  ( $o{b} // 0 ) ; # 最小のバイトサイズを見たな避ければ、対象外。
+    push @{ $s2f{$size} } , $_ ;
   }
 
   my $least = $o{f} // 2 ; # 同じバイトサイズが何個以上の場合を対象にするか? 
   my @sizes  = sort { $a<=>$b } grep { @{ $s2f { $_ } } >= $least } keys %s2f ; 
   my $fmt = do { my $t = max @sizes , 0 ; my $d = length "$t" ; "%${d}s" } ; # サイズの数値のフォーマットを"%7d"のように決める。
   for my $size ( @sizes ) { 
-  	my @files = sort @{ $s2f{$size} } ; # ファイルの一覧
-  	@files = sort {(stat $a)[9] <=> (stat $b)[9] } @files if $o{t} ;
-  	@files = reverse @files if $o{'~'} ;
-  	my %seen ; # 既に見たハッシュダイジェスト値
-  	for ( @files ) { 
+    my @files = sort @{ $s2f{$size} } ; # ファイルの一覧
+    @files = sort {(stat $a)[9] <=> (stat $b)[9] } @files if $o{t} ;
+    @files = reverse @files if $o{'~'} ;
+    my %seen ; # 既に見たハッシュダイジェスト値
+    for ( @files ) { 
       my @t3 = ( stat $_ ) [ 8, 9, 10 ] ; # <-- atime, mtime, ctime の 日時3情報
-  	  my $ctx = Digest::MD5 -> new ;
-  	  if ( $o{m} ) {
-  	    open my $FH, '<', $_ or die  "Can't open '$_': $!";
-  	    binmode $FH ; 
-	      $ctx -> addfile ( $FH );
-	      close $FH ;
-	    }
+      my $ctx = Digest::MD5 -> new ;
+      if ( $o{m} ) {
+        open my $FH, '<', $_ or die  "Can't open '$_': $!";
+        binmode $FH ; 
+        $ctx -> addfile ( $FH );
+        close $FH ;
+      }
 
-	    utime @t3[0,1] , $_ if $o{m} ; # ハッシュ値計算でアクセスしたことでアクセス日時が変わったことを、無かったことにする。
+      utime @t3[0,1] , $_ if $o{m} ; # ハッシュ値計算でアクセスしたことでアクセス日時が変わったことを、無かったことにする。
       my $digest = $o{m} ? $ctx -> hexdigest : '---' ;
       next if ! $seen{ $digest } ++ && $o{2} ;
       if ( $o{D} && $seen { $digest } >= 2 ) {
         unlink $_ if ! $o{n} ; # ドライラン -n が指定していなければ、ファイルを削除。
         $_ .=  YELLOW "\t<-- " . ( $o{n} ? 'would be ' : '' ) . 'removed.' ;
       }
-  	  my @out = ( sprintf ($fmt , $size)  , $digest , map ( dtwhen $_ , @t3 ) , $_ ) ;
-  	  say join "\t" , @out ;
+      my @out = ( sprintf ($fmt , $size)  , $digest , map ( dtwhen $_ , @t3 ) , $_ ) ;
+      say join "\t" , @out ;
       $cnt ++ 
-  	}
+    }
   }
 }
 
 sub dtwhen ( $ ) { 
-	my $fmt = abs ( $_[0] - $t0 ) >= 86400 * 180 ? '%Y-%m-%d' : $o{s} ? '%m-%d %H:%M:%S' : '%m-%d %H:%M';
-	strftime $fmt , localtime $_[0] ;
+  my $fmt = abs ( $_[0] - $t0 ) >= 86400 * 180 ? '%Y-%m-%d' : $o{s} ? '%m-%d %H:%M:%S' : '%m-%d %H:%M';
+  strftime $fmt , localtime $_[0] ;
 }
 
 END {
