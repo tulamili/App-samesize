@@ -1,7 +1,7 @@
 #!/usr/bin/perl 
 use 5.014 ; use strict ; use warnings  ;
 use feature qw [ say ] ;
-use Time::HiRes qw[gettimeofday tv_interval] ; 
+use Time::HiRes qw[ stat gettimeofday tv_interval ] ;  # stat をマイクロ秒単位にする。
 use Term::ANSIColor qw [ :constants color ] ; $Term::ANSIColor::AUTORESET = 1 ; 
 use File::Spec::Functions qw[ catfile splitdir rel2abs updir ] ; 
 use Getopt::Std ; 
@@ -53,10 +53,11 @@ sub main () {
   	    open my $FH, '<', $_ or die  "Can't open '$_': $!";
   	    binmode $FH ; 
 	      $ctx -> addfile ( $FH );
+	      close $FH ;
 	    }
 
-	    utime @t3[0,1] , $_ unless $o{0} ; # <- -- --- 時刻情報を破壊し得る。もしくは秒の小数点以下の情報が消える。
-      my $digest = $o{0} ? '---' : $ctx->hexdigest ;
+	    utime @t3[0,1] , $_ unless $o{0} ; # ハッシュ値計算でアクセスしたことでアクセス日時が変わったことを、無かったことにする。
+      my $digest = $o{0} ? '---' : $ctx -> hexdigest ;
       next if $o{2} && ! $seenD{ $digest } ++ ;
       if ( $o{D} && ! $o{0} ) { unlink $_ ; next } ; 
   	  my @out = ( sprintf ($nfmt , $size)  , $digest , map ( dtwhen $_ , @t3 ) , $_ ) ;
