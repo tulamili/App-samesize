@@ -18,16 +18,16 @@ my $d0 = getcwd ;
 my $cntF = 0 ; # 表示する出力ファイル数
 my $cntD = 0 ; # 削除したファイルの個数
 
-getopts '~2b:Df:l:mnstv:' , \my%o ; 
+getopts '~2b:d:Df:l:mnv:' , \my%o ; 
+$o{d} //= '' ; # 日時情報の制御。0を含むなら出さない。sを含むなら秒単位。
 
 my @F0 = @ARGV ? @ARGV : glob '*' ; # glob '*' はディレクトリのファイルは抽出しない。
 
 if ( $o{D} ) { # -Dは破壊的ゆえ、色々ここで仕込む。↓
-  #$o{2} = 1 if $o{D} ; # -2 指定で、1番目は表示しない。
   $o{m} = 1 ; # -m 指定で、m5ハッシュ値を計算させる。
 } 
 
-$SIG{ INT } = sub { exit } ; # Ctrl + C の押下でENDブロックを実行して終了。
+$SIG { INT } = sub { exit } ; # Ctrl + C の押下でENDブロックを実行して終了。
 & main ; 
 exit 0 ;
 
@@ -69,7 +69,7 @@ sub main () {
         $_ .=  YELLOW "\t<-- " . ( $o{n} ? 'would be removed..' : $c ? 'removed.' : 'removing failed !') ;
         $cntD += $c // 0 ; 
       }
-      my @out = ( sprintf ($fmt , $size)  , $digest , map ( dtwhen $_ , @t3 ) , $_ ) ;
+      my @out = ( sprintf ($fmt , $size) , $digest , $o{d} =~ /0/o ? () : map ( dtwhen $_, @t3 ) , $_ ) ;
       say join "\t" , @out ;
       $cntF ++ 
     }
@@ -77,7 +77,7 @@ sub main () {
 }
 
 sub dtwhen ( $ ) { 
-  my $fmt = abs ( $_[0] - $t0 ) >= 86400 * 180 ? '%Y-%m-%d' : $o{s} ? '%m-%d %H:%M:%S' : '%m-%d %H:%M';
+  my $fmt = abs ( $_[0] - $t0 ) >= 86400 * 180 ? '%Y-%m-%d' : $o{d} =~ /s/oi ? '%m-%d %H:%M:%S' : '%m-%d %H:%M';
   strftime $fmt , localtime $_[0] ;
 }
 
@@ -88,7 +88,7 @@ END {
   say STDERR BOLD FAINT " --  " , 
   sprintf( "%.6f", tv_interval $time_start , [ gettimeofday ] ) , " second(s) in process. " , 
   $cntF ," file(s) shown. " , ( $cntD ? "$cntD file(s) removed. " : '' ) ,   
-  "Format : byte-size, hash-value, {a,m,c}time, file-name." ;
+  "Format : byte-size, md5-value, {a,m,c}time, file-name." ;
 }
 
 ## ヘルプの扱い
@@ -125,11 +125,12 @@ sub HELP_MESSAGE {
    -2 : 同じファイルのバイトサイズで，(-mが指定されたらハッシュ値も考慮して)2番目以降を取り出す。
    -b N : 処理対象とする最小のバイトサイズを指定。0バイトファイルを避けるなら1を指定。
    -D : 同じファイルサイズで，同じハッシュ値のものについて、2番目以降をファイル除去する。<-- 破壊的, 危険
+   -d 0 : 日時情報を出さない。
+   -d s : 分だけで無くて秒単位で出力する。
    -f N : 少なくとも何回出現したものだけを取り出すかの指定。初期値は2。
    -l 0 : シンボリックリンクのファイルは、対象外にする。
-   -m : MD5ハッシュ値を算出する。(なお、ファイルのアクセス時刻は変更しない工夫がしてある。)
+   -m : MD5ハッシュ値(32桁)を算出する。(なお、ファイルのアクセス時刻は変更しない工夫がしてある。)
    -n  : ドライラン。-D に対して、実際に削除は実行はしない。
-   -s : 180日以内の日時については、通常分単位。日時情報は秒単位で表示。なお、180日以上前は日付のみ。
    -t : 同じファイルサイズなら書換日時の古い順(time)
    -v 0 ; 標準エラー出力に出力される2次情報を出力しない。
    -~ : ファイルの順序を指定されたものから逆順にする。
@@ -148,5 +149,7 @@ sub HELP_MESSAGE {
 
    開発上のメモ :
      * -f N で 「N回以上現れた同じサイズかハッシュ値」に制限しているが、-y N..N のような柔軟な書き方を採用したい。
+     * ファイルサイズの小さい順に並ぶようになっている。これを逆順にするオプションは一回は検討したが、煩雑になるので棚上げ。
+     * SHA1も使えるように検討したが、MD5より時間がかかるので、使わないことにした。
 
 =cut
