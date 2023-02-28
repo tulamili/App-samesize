@@ -1,13 +1,13 @@
 #!/usr/bin/perl 
 use 5.014 ; use strict ; use warnings  ;
+use Cwd qw [ getcwd abs_path ] ;
 use feature qw [ say ] ;
-use Time::HiRes qw[ stat gettimeofday tv_interval ] ;  # stat をマイクロ秒単位にする。
-use Term::ANSIColor qw [ :constants color ] ; $Term::ANSIColor::AUTORESET = 1 ; 
 use File::Spec::Functions qw[ catfile splitdir rel2abs updir ] ; 
 use Getopt::Std ; 
 use List::Util qw [ max min sum sum0 reduce ] ;
-use Cwd qw [ getcwd abs_path ] ;
 use POSIX qw[ strftime ] ;
+use Term::ANSIColor qw [ :constants color ] ; $Term::ANSIColor::AUTORESET = 1 ; 
+use Time::HiRes qw[ stat gettimeofday tv_interval ] ;  # stat をマイクロ秒単位にする。
 
 use Digest::MD5 qw[ md5 md5_hex md5_base64 ] ; # use Digest::SHA1 qw[ sha1 sha1_hex sha1_base64 ]; 
 
@@ -15,13 +15,14 @@ sub dtwhen ( $ ) ;
 
 my $time_start = [ gettimeofday ] ; 
 my $t0 = $time_start -> [0] ;
+my $d0 = getcwd ; 
 
-getopts '2b:Df:l:mnos' , \my%o ; 
+getopts '~2b:Df:l:mnst' , \my%o ; 
 
-my @Files0 = @ARGV ? @ARGV : glob '*' ; # glob '*' はディレクトリのファイルは抽出しない。
+my @F0 = @ARGV ? @ARGV : glob '*' ; # glob '*' はディレクトリのファイルは抽出しない。
 
 if ( $o{D} ) { # -Dは破壊的ゆえ、色々ここで仕込む。↓
-  $o{2} = 1 if $o{D} ; # -2 指定で、1番目は表示しない。
+  #$o{2} = 1 if $o{D} ; # -2 指定で、1番目は表示しない。
   $o{m} = 1 if $o{D} ; # -m 指定で、m5ハッシュ値を計算させる。
 } 
 & main ; 
@@ -32,8 +33,11 @@ END{ print RESET "" } ;
 sub main () {
 
   my %s2f ; # %{ $s2f { $size } } でバイトサイズから、ファイル名の一覧を取り出せる。
-  for ( @Files0 ) {
-  	next if -d $_ ; # ディレクリファイルは、対象外となる。
+  while ( defined ( $_  = shift @F0 ) ) {
+  	#next if -d $_ ; # <-- ディレクリファイルは、その直下のファイルを見るようにする。
+    #do{ push @Files0 , glob "$_"  ; say YELLOW $_ ; next } if -d ; # <-- ディレクリファイルは、その直下のファイルを見るようにする。
+    # ↓ ディレクリファイルは、その直下のファイルを見るようにする。ただし、ディレクトリの深追いはしない。
+    do{ my $t = $_ ; chdir $t ; push @F0 , grep{ !-d && ($_=catfile $t,$_) } glob '*' ; chdir $d0 ; next } if -d ; 
     next if -l $_ && 0 eq ($o{l}//'') ;  # -l0 を指定すると、シンボリックリンクファイルは、対象外。
   	my $size = ( stat ) [7] ; # <-- - lstat でなくて stat なので、シンボリックリンクのファイルはその先の中身を見る。
   	next if $size <  ( $o{b} // 0 ) ; # 最小のバイトサイズを見たな避ければ、対象外。
@@ -45,8 +49,8 @@ sub main () {
   my $fmt = do { my $t = max @sizes , 0 ; my $d = length "$t" ; "%${d}s" } ; # サイズの数値のフォーマットを"%7d"のように決める。
   for my $size ( @sizes ) { 
   	my @files = sort @{ $s2f{$size} } ; # ファイルの一覧
-  	@files = sort {(stat $a)[9] <=> (stat $b)[9] } @files if $o{n} // $o{o} ;
-  	@files = reverse @files if $o{n} ;
+  	@files = sort {(stat $a)[9] <=> (stat $b)[9] } @files if $o{t} ;
+  	@files = reverse @files if $o{'~'} ;
   	my %seenD ; # 既に見たハッシュダイジェスト値
   	for ( @files ) { 
       my @t3 = ( stat $_ ) [ 8, 9, 10 ] ; # <-- atime, mtime, ctime の 日時3情報
@@ -60,8 +64,10 @@ sub main () {
 
 	    utime @t3[0,1] , $_ if $o{m} ; # ハッシュ値計算でアクセスしたことでアクセス日時が変わったことを、無かったことにする。
       my $digest = $o{m} ? $ctx -> hexdigest : '---' ;
-      next if $o{2} && ! $seenD{ $digest } ++ ;
-      do { unlink $_ ; $_ .=  RED "\t<-- removed." } if $o{D} ; 
+      next if ! $seenD{ $digest } ++ && $o{2} ;
+#      do { unlink $_ ; $_ .=  RED "\t<-- removed." } if $o{D} && $seenD{ $digest } >= 2 ; 
+#say CYAN $digest ;
+      do { 1 ; $_ .=  YELLOW "\t<-- " . ($o{n}?'would be ':'').'removed.' } if $o{D} && $seenD{ $digest } >= 2 ; 
   	  my @out = ( sprintf ($fmt , $size)  , $digest , map ( dtwhen $_ , @t3 ) , $_ ) ;
   	  say join "\t" , @out ;
   	}
@@ -106,11 +112,12 @@ sub HELP_MESSAGE {
  オプション:
    -m : MD5ハッシュ値を算出する。(なお、ファイルのアクセス時刻は変更しない工夫がしてある。)
    -b N : 処理対象とする最小のバイトサイズを指定。0バイトファイルを避けるなら1を指定。
+   -D : 同じファイルサイズで，同じハッシュ値のものについて、2番目以降をファイル除去する。<-- 破壊的, 危険
    -f N : 少なくとも何回出現したものだけを取り出すかの指定。初期値は2。
    -l 0 : シンボリックリンクのファイルは、対象外にする。
-   -n : 同じファイルサイズなら書換日時の新しい順 (newer)
-   -o : 同じファイルサイズなら書換日時の古い順 (older)
+   -n  : ドライラン。-D に対して、実際に削除は実行はしない。
    -s : 180日以内について、日時情報は秒単位で表示。
+   -t : 同じファイルサイズなら書換日時の古い順(time)
+   -~ : ファイルの順序を指定されたものから逆順にする。
 
    -2 : 同じファイルサイズで，同じハッシュ値のものについて、2番目以降を取り出す。
-   -D : 同じファイルサイズで，同じハッシュ値のものについて、2番目以降をファイル除去する。<-- 破壊的, 危険
