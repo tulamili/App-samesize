@@ -10,8 +10,7 @@ use POSIX qw[ strftime ] ;
 use Term::ANSIColor qw [ :constants color ] ; $Term::ANSIColor::AUTORESET = 1 ; 
 use Time::HiRes qw[ stat gettimeofday tv_interval ] ;  # stat をマイクロ秒単位にする。
 
-
-sub dtwhen ( $ ) ;
+sub dtwhen ( $ ) ;  # 各日時情報を、表示用の文字列に変換する。
 
 my $time_start = [ gettimeofday ] ; 
 my $t0 = $time_start -> [0] ;
@@ -66,7 +65,7 @@ sub main () {
       my $digest = $o{m} ? $ctx -> hexdigest : '---' ;
       next if ! $seen{ $digest } ++ && $o{2} ;
       if ( $o{D} && $seen { $digest } >= 2 ) {
-        unlink $_ if ! $o{n} ; 
+        unlink $_ if ! $o{n} ; # ドライラン -n が指定していなければ、ファイルを削除。
         $_ .=  YELLOW "\t<-- " . ( $o{n} ? 'would be ' : '' ) . 'removed.' ;
       }
   	  my @out = ( sprintf ($fmt , $size)  , $digest , map ( dtwhen $_ , @t3 ) , $_ ) ;
