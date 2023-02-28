@@ -18,7 +18,7 @@ my $t0 = $time_start -> [0] ;
 
 getopts '0:2b:Df:nos' , \my%o ; 
 
-my @files = @ARGV ? @ARGV : glob '*' ;
+my @files = @ARGV ? @ARGV : glob '*' ; # glob '*' はディレクトリのファイルは抽出しない。
 
 $o{2} = 1 if $o{D} ; # <--- 要注意。 不用意のこの行はコメントアウトや除去をしないように。
 $o{0} //= 1 ; # <--- 要注意。 不用意のこの行はコメントアウトや除去をしないように。
@@ -31,7 +31,7 @@ sub main () {
 
   my %s2f ;
   for ( @files ) {
-  	next if -d $_ ;
+  	next if -d $_ ; # ディレクリファイルは、対象外となる。
   	my $size = ( lstat $_ ) [7] ; # <--  -- lstat で良いのか
   	next if defined $o{b} && $size < $o{b} ;
   	push @{$s2f{$size}} , $_ ;
@@ -40,7 +40,7 @@ sub main () {
   }
 
   my $least = $o{f} // 2 ; # ? 1 : 2 ;
-  my @sizes  = sort {$a<=>$b} grep {  @{ $s2f { $_ } } >= $least } keys %s2f ; 
+  my @sizes  = sort { $a<=>$b } grep { @{ $s2f { $_ } } >= $least } keys %s2f ; 
   my $nfmt = do { my $t = max @sizes , 0 ; my $d = length "$t" ; "%${d}s" } ; # <-- %${d}u ?? 
   for my $size ( @sizes ) { 
   	#next if @{ $s2f{$size} } == 1 ;
@@ -100,10 +100,11 @@ sub HELP_MESSAGE {
 =encoding utf8
 =head1
 
-  このコマンドについては、ファイルの時刻情報を書き換えたり、消去する機能があるのに、デバグなどが不十分なので、
-  その危険性を理解して使うこと。
+  警告: このコマンドは、ファイルのアクセス時刻情報を書き換えたり、消去したりすることがある。
 
 　$0 files .. 
+
+  全く同じバイトサイズのファイルを検出する。
 
  オプション:
    -0 0 : MD5ハッシュ値を算出する。ファイルのアクセス時刻やinode時刻を変える危険を確認する効果がある。
