@@ -83,7 +83,7 @@ sub dtwhen ( $ ) {
   strftime $fmt , localtime $_[0] ;
 }
 
-END{ print RESET '' } ; # ENDの順序は重要。最初に書いたものが最後に実行される。このENDで文字の着色を消すことが出来る。
+END{ print STDERR RESET '' } ; # ENDの順序は重要。最初に書いたものが最後に実行される。このENDで文字の着色を消すことが出来る。
 
 END {
   exit if 0 eq ( $o{v} // '' ) ;
