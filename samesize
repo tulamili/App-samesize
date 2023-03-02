@@ -1,4 +1,9 @@
 #!/usr/bin/perl 
+
+# 作成者: 下野寿之 Toshiyuki Shimono. bin4tsv @ gmail.com
+# 2019年夏以前に最初に作ったが、2023年2月末に洗練すべき機能を洗練した。
+# 充分な機能を持たせて、日本語のマニュアルもできた後で、英語でマニュアルを書きなおすであろう(と2021年以前から考え中)。
+
 use 5.014 ; use strict ; use warnings  ;
 use Cwd qw [ getcwd abs_path ] ;
 use Digest::MD5 qw[ md5 md5_hex md5_base64 ] ; # use Digest::SHA1 qw[ sha1 sha1_hex sha1_base64 ]; 
