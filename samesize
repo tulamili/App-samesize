@@ -14,7 +14,7 @@ use List::Util qw [ max min sum sum0 reduce uniq ] ;
 use POSIX qw[ strftime ] ;
 use Term::ANSIColor qw [ :constants color ] ; $Term::ANSIColor::AUTORESET = 1 ; 
 use Time::HiRes qw[ stat gettimeofday tv_interval ] ;  # stat をマイクロ秒単位にする。
-
+use App::samesize ; # バージョン情報を取り出すのに使う。
 sub dtwhen ( $ ) ;  # 各日時情報を、表示用の文字列に変換する。
 
 my $time_start = [ gettimeofday ] ; 
@@ -101,11 +101,12 @@ END{ print STDERR RESET '' } ; # ENDの順序は重要。最初に書いたも�
 END {
   exit if 0 eq ( $o{v} // '' ) ;
   say STDERR BOLD FAINT " --  " , 
-  sprintf( "%.6f", tv_interval $time_start , [ gettimeofday ] ) , " second(s) in process. " , 
-  $cntF ," file(s) shown. " , ( $cntD ? "$cntD file(s) removed. " : '' ) ,   
+    $cntF ," file(s) shown. " , ( $cntD ? "$cntD file(s) removed. " : '' ) ,   
   'Format : byte-size, md5-value, ', ($o{d} =~ /0/ ? '' : '{a,m,c}time, ') , 'filename. ' , 
   'Total byte size shown : ' , $sizetotal , 
-  ' Maximum duplication : ' , $maxdup ; 
+  '; Maximum duplication : ' , $maxdup , 
+  sprintf( "; %.6f", tv_interval $time_start , [ gettimeofday ] ) , " sec in process. " , 
+  "(App::samesize\@$App::samesize::VERSION)" ;
 }
 
 ## ヘルプの扱い
