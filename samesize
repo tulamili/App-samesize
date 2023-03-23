@@ -10,7 +10,7 @@ use Digest::MD5 qw[ md5 md5_hex md5_base64 ] ; # use Digest::SHA1 qw[ sha1 sha1_
 use feature qw [ say ] ;
 use File::Spec::Functions qw[ catfile splitdir rel2abs updir ] ; 
 use Getopt::Std ; 
-use List::Util qw [ max min sum sum0 reduce ] ;
+use List::Util qw [ max min sum sum0 reduce uniq ] ;
 use POSIX qw[ strftime ] ;
 use Term::ANSIColor qw [ :constants color ] ; $Term::ANSIColor::AUTORESET = 1 ; 
 use Time::HiRes qw[ stat gettimeofday tv_interval ] ;  # stat をマイクロ秒単位にする。
@@ -22,6 +22,8 @@ my $t0 = $time_start -> [0] ;
 my $d0 = getcwd ; 
 my $cntF = 0 ; # 表示する出力ファイル数
 my $cntD = 0 ; # 削除したファイルの個数
+my $sizetotal = 0 ; # 出力したバイトサイズの合計値
+my $maxdup = 0 ; # 最大何重に重なったか
 
 getopts '~:2b:d:Df:l:mnv:' , \my%o ; 
 $o{d} //= '' ; # 日時情報の制御。0を含むなら出さない。sを含むなら秒単位。
@@ -40,21 +42,26 @@ exit 0 ;
 sub main () {
 
   my %s2f ; # %{ $s2f { $size } } でバイトサイズから、ファイル名の一覧を取り出せる。
+  my %fseen ; # ファイルの重複を防ぐ仕組み
   while ( defined ( $_  = shift @F0 ) ) {
     # ↓ ディレクリファイルは、その直下のファイルを見るようにする。ただし、ディレクトリの深追いはしない。
     do{ my $t = $_ ; chdir $t ; push @F0 , grep{ !-d && ($_=catfile $t,$_) } glob '*' ; chdir $d0 ; next } if -d ; 
+    next if $fseen{ $_ } ++ ;
     next if -l $_ && 0 eq ($o{l}//'') ;  # -l0 を指定すると、シンボリックリンクファイルは、対象外。
     my $size = ( stat ) [7] ; # <-- - lstat でなくて stat なので、シンボリックリンクのファイルはその先の中身を見る。
-    next if $size <  ( $o{b} // 0 ) ; # 最小のバイトサイズを見たな避ければ、対象外。
+    next if $size <  ( $o{b} // 0 ) ; # 最小のバイトサイズの条件を満たさない場合は、対象外。
     push @{ $s2f{$size} } , $_ ;
   }
+  undef %fseen ;
 
   my $least = $o{f} // 2 ; # 同じバイトサイズが何個以上の場合を対象にするか? 
   my @sizes  = sort { $a<=>$b } grep { @{ $s2f { $_ } } >= $least } keys %s2f ; 
   @sizes = reverse @sizes if $o{'~'} =~ /s/ ;
+  
   my $fmt = do { my $t = max @sizes , 0 ; my $d = length "$t" ; "%${d}s" } ; # サイズの数値のフォーマットを"%7d"のように決める。
   for my $size ( @sizes ) { 
     my @files = sort @{ $s2f{$size} } ; # ファイルの一覧
+    $maxdup = @files if @files > $maxdup ;
     @files = sort {(stat $a)[9] <=> (stat $b)[9]} @files if $o{t} || $o{'~'} =~ /t/oi ;
     @files = reverse @files if $o{'~'} =~ /t/oi ;
     my %seen ; # 既に見たハッシュダイジェスト値
@@ -77,6 +84,7 @@ sub main () {
         $cntD += $c // 0 ; 
       }
       my @out = ( sprintf ($fmt , $size) , $digest , $o{d} =~ /0/o ? () : map ( dtwhen $_, @t3 ) , $_ ) ;
+      $sizetotal += $size ;
       say join "\t" , @out ;
       $cntF ++ 
     }
@@ -95,7 +103,9 @@ END {
   say STDERR BOLD FAINT " --  " , 
   sprintf( "%.6f", tv_interval $time_start , [ gettimeofday ] ) , " second(s) in process. " , 
   $cntF ," file(s) shown. " , ( $cntD ? "$cntD file(s) removed. " : '' ) ,   
-  'Format : byte-size, md5-value, ', ($o{d} =~ /0/ ? '' : '{a,m,c}time, ') , 'filename.' ;
+  'Format : byte-size, md5-value, ', ($o{d} =~ /0/ ? '' : '{a,m,c}time, ') , 'filename. ' , 
+  'Total byte size shown : ' , $sizetotal , 
+  ' Maximum duplication : ' , $maxdup ; 
 }
 
 ## ヘルプの扱い
@@ -119,14 +129,17 @@ sub HELP_MESSAGE {
 
   警告: このコマンドは謝ってファイルを消去する恐れがある。ただしどのファイルを消すか確かめる機能は実装してある。
 
-　$0 files 
+　$0  FILE [FILE] .. 
 
-  全く同じバイトサイズのファイルを検出する。
-  -mの指定によりMD5ハッシュ値が等しいかも見る。
-  引数には(通常2個以上の)ファイルを指定するが、ディレクトリが含まれていた場合には、
-   そのディレクトリの直下のファイルも見る。
-  ハッシュ値を計算する場合は、実際にはファイルにアクセスするのでアクセス時刻が変わってしまうが
+  全く同じバイトサイズのファイルを検出する。 -m の指定により、MD5ハッシュ値が等しいかも見る。
+  引数はファイルを指定するが、ディレクトリが含まれていた場合には、そのディレクトリの直下のファイルも見る。
+  ハッシュ値を計算する場合は、実際にはファイルにアクセスするのでアクセス時刻が変わってしまうが、
    その計算後に、計算前のアクセス時刻に戻すようにしている(OSに依存するかも知れない)。
+
+ 利用例: 
+   $0 **/*(.)  # ZSHのファイル修飾子(.)でプレインなファイルだけを指定。
+   $0 **/*(/)  # ZSHのファイル修飾子(/)でディレクトリのファイルだけを指定。引数が **/*(.)の場合より短くなる。
+   $0 `find . -type d` # Bash だとこうする。
 
  オプション:  (下記で N は数値を表す。他は固定文字列。オプションとパラメータの間の空白は省略可能。-aと-bは-abのようにできる。)
    --help : このヘルプ画面を出力する。 --help opt とすると、-のつくオプションの説明だけを出力する。
