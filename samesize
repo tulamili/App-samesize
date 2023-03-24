@@ -29,6 +29,8 @@ getopts '~:2b:d:Df:Fl:mnv:' , \my%o ;
 $o{d} //= '' ; # 日時情報の制御。0を含むなら出さない。sを含むなら秒単位。
 $o{'~'} //= '' ; # いろんな順序の制御を逆にする。パラメータに応じて。
 
+
+my $d3 = sub ($) { $_[0] =~ s/(?<=\d)(?=(\d\d\d)+($|\D))/,/gr } ; # 数を3桁区切りに変換する。
 my @F0 = @ARGV ? @ARGV : glob '*' ; # glob '*' はディレクトリのファイルは抽出しない。
 
 if ( $o{D} ) { # -Dは破壊的ゆえ、色々ここで仕込む。↓
@@ -104,16 +106,17 @@ sub dtwhen ( $ ) {
   strftime $fmt , localtime $_[0] ;
 }
 
+
+
 END{ print STDERR RESET '' } ; # ENDの順序は重要。最初に書いたものが最後に実行される。このENDで文字の着色を消すことが出来る。
 
 END {
   exit if 0 eq ( $o{v} // '' ) ;
   say STDERR BOLD FAINT " --  " , 
-    $cntF ," file(s) shown. " , ( $cntD ? "$cntD file(s) removed. " : '' ) ,   
+    $cntF ," file(s) shown with ", $d3 -> ( $sizetotal ), " bytes in total ; " , ( $cntD ? "$cntD file(s) removed. " : '' ) ,   
   'Format : byte-size, md5-value, ', ($o{d} =~ /0/ ? '' : '{a,m,c}time, ') , 'filename. ' , 
-  'Total byte size shown : ' , $sizetotal , 
-  '; Maximum duplication : ' , $maxdup , 
-  sprintf( "; %.6f", tv_interval $time_start , [ gettimeofday ] ) , " sec in process. " , 
+  ' ; Max dup. : ' , $maxdup , 
+  sprintf( "; %.3f", tv_interval $time_start , [ gettimeofday ] ) , " sec in proc. " , 
   "(App::samesize\@$App::samesize::VERSION)" ;
 }
 
